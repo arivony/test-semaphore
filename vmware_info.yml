@@ -1,0 +1,20 @@
+---
+- name: Gérer les VMs VMware
+  hosts: vcenter_servers
+  connection: local # Les modules VMware s'exécutent localement sur le contrôleur (Semaphore)
+
+  tasks:
+    - name: Récupérer les informations de la VM
+      community.vmware.vmware_guest_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: False # Définir à True si vous utilisez des certificats valides
+        name: "Nom_de_votre_VM_cible" # Le nom de la VM dans vCenter
+      delegate_to: localhost
+      register: vm_info
+
+    - name: Afficher l'état de la VM
+      ansible.builtin.debug:
+        msg: "La VM '{{ vm_info.instances[0].guest_name }}' est dans l'état de puissance : {{ vm_info.instances[0].power_state }}"
+      when: vm_info.instances | length > 0
