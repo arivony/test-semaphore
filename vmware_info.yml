@@ -4,6 +4,9 @@
   connection: local
   gather_facts: no
 
+  vars:
+    vm_name: "TNLECSRVDTB55"  # Define your VM name here
+
   tasks:
     - name: Récupérer les informations de la VM
       community.vmware.vmware_guest_info:
@@ -11,25 +14,16 @@
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
         validate_certs: False
-        name: "{{ vm_name | default(omit) }}"  # Allows querying a single VM or all VMs if name not set
+        name: "{{ vm_name }}"
       delegate_to: localhost
       register: vm_info
-      failed_when: vm_info.failed is defined and vm_info.failed  # Avoid playbook crash if module fails
+      failed_when: vm_info.failed is defined and vm_info.failed
 
     - name: Debug full VM info
       ansible.builtin.debug:
         var: vm_info
 
-    - name: Afficher l'état de toutes les VMs
+    - name: Afficher l'état de la VM
       ansible.builtin.debug:
-        msg: >-
-          La VM '{{ item.name }}' est dans l'état de puissance : {{ item.power_state }}
-      loop: >-
-        {% if vm_info.virtual_machines is defined %}
-          {{ vm_info.virtual_machines }}
-        {% elif vm_info.vm_info is defined %}
-          [ vm_info.vm_info ]
-        {% else %}
-          []
-        {% endif %}
-      when: vm_info is defined
+        msg: "La VM '{{ vm_info.virtual_machines[0].name }}' est dans l'état de puissance : {{ vm_info.virtual_machines[0].power_state }}"
+      when: vm_info.virtual_machines is defined and vm_info.virtual_machines | length > 0
