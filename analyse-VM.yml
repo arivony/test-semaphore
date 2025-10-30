@@ -1,40 +1,39 @@
 ---
-- name: VMware VM Summary
-  hosts: vcenter_servers
-  gather_facts: false
-  connection: local
-
+- name: vCenter VM Summary
+  hosts: localhost
+  gather_facts: no
   vars:
     vcenter_hostname: "vcenterpreprod.basan.mg"
-    vcenter_username: "administrator@vsphere.local"
-    vcenter_password: "YOUR_PASSWORD"
-    validate_certs: false
+    vcenter_user: "administrator@vsphere.local"
+    vcenter_password: "YourPassword"
+    validate_certs: no
 
   tasks:
 
     - name: Gather all VMs from vCenter
       community.vmware.vmware_vm_info:
         hostname: "{{ vcenter_hostname }}"
-        username: "{{ vcenter_username }}"
+        username: "{{ vcenter_user }}"
         password: "{{ vcenter_password }}"
         validate_certs: "{{ validate_certs }}"
-      delegate_to: localhost
       register: all_vms
+      delegate_to: localhost
 
     - name: Initialize counters
       set_fact:
         linux_count: 0
         windows_count: 0
+        vm_table: []
 
     - name: Build VM table and count Linux/Windows
       set_fact:
-        vm_table: "{{ vm_table | default([]) + [ {
+        vm_table: "{{ vm_table + [ {
           'name': (item.guest_name | default('Unknown')),
           'os': (item.guest_fullname | default('Unknown')),
           'power': (item.power_state | default('Unknown'))
         } ] }}"
-        linux_count: "{{ linux_count + 1 if (item.guest_fullname is defined and 'linux' in item.guest_fullname | lower) else linux_count }}"
-        windows_count: "{{ windows_count + 1 if (item.guest_fullname is defined and 'windows' in item.guest_fullname | lower) else windows_count }}"
+        linux_count: "{{ (linux_count | int) + 1 if (item.guest_fullname is defined and 'linux' in (item.guest_fullname | lower)) else (linux_count | int) }}"
+        windows_count: "{{ (windows_count | int) + 1 if (item.guest_fullname is defined and 'windows' in (item.guest_fullname | lower)) else (windows_count | int) }}"
       loop: "{{ all_vms.virtual_machines | default([]) }}"
 
     - name: Display VM Table
@@ -49,4 +48,4 @@
         msg: |
           Total VMs: {{ vm_table | length }}
           Linux VMs: {{ linux_count }}
-          Windows
+          Windows VMs: {{ windows_count }}
