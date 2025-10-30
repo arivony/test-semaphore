@@ -1,5 +1,5 @@
 ---
-- name: VMware VM Summary Report
+- name: VMware VM Detailed Report
   hosts: vcenter_servers
   connection: local
   gather_facts: false
@@ -25,9 +25,9 @@
         linux_count: 0
         windows_count: 0
 
-    - name: Show all VM names and OS
-      ansible.builtin.debug:
-        msg: "VM '{{ item.name | default('Unknown') }}' -> OS: '{{ item.guest_full_name | default('Unknown') }}', Power State: '{{ item.power_state | default('Unknown') }}'"
+    - name: Build VM report list
+      set_fact:
+        vm_report: "{{ vm_report | default([]) + [ { 'name': item.name | default('Unknown'), 'os': item.guest_full_name | default('Unknown'), 'power': item.power_state | default('Unknown') } ] }}"
       loop: "{{ all_vms.virtual_machines | default([]) }}"
 
     - name: Count Linux and Windows VMs
@@ -42,9 +42,16 @@
       loop: "{{ all_vms.virtual_machines | default([]) }}"
       when: item.guest_full_name is defined and ('Windows' in item.guest_full_name)
 
-    - name: Show summary
+    - name: Display VM Table
       ansible.builtin.debug:
         msg: |
-          Total VMs: {{ all_vms.virtual_machines | length | default(0) }}
+          {% for vm in vm_report %}
+          Name: {{ vm.name }} | OS: {{ vm.os }} | Power: {{ vm.power }}
+          {% endfor %}
+
+    - name: Display Summary
+      ansible.builtin.debug:
+        msg: |
+          Total VMs: {{ vm_report | length }}
           Linux VMs: {{ linux_count }}
           Windows VMs: {{ windows_count }}
