@@ -1,0 +1,110 @@
+---
+- name: Création automatique de VM et enregistrement sur phpIPAM
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # ⚙️ Variables modifiables depuis Semaphore
+    os_type: "Windows"               # Windows ou Linux
+    os_version: "Windows Server 2019" # Versions possibles selon le template
+    hostname_prefix: "TNRLECSRVAPP"  # Préfix hostname
+    start_index: 20                   # Index initial pour hostname
+    vlan_id: 10                        # VLAN ou subnet ID dans phpIPAM
+    vlan_network_name: "VLAN10"       # Nom du réseau dans VMware ou hyperviseur
+    phpipam_api_url: "https://phpipam.example/api/APP_ID/"
+    phpipam_api_token: "VOTRE_TOKEN"
+    vcenter_hostname: "vcenter.example.com"
+    vcenter_user: "administrator@vsphere.local"
+    vcenter_password: "VOTRE_MDP"
+    os_templates:
+      Windows:
+        "Windows Server 2019": "WIN2019_TEMPLATE_ID"
+        "Windows Server 2022": "WIN2022_TEMPLATE_ID"
+      Linux:
+        "Ubuntu 22.04": "UBUNTU22_TEMPLATE_ID"
+        "CentOS 8": "CENTOS8_TEMPLATE_ID"
+
+  tasks:
+
+    - name: Sélectionner le template OS
+      set_fact:
+        vm_template_id: "{{ os_templates[os_type][os_version] }}"
+
+    - name: Trouver un hostname disponible
+      set_fact:
+        hostname_found: ""
+      block:
+        - name: Boucle pour trouver un hostname libre
+          vars:
+            current_index: "{{ start_index }}"
+          until: hostname_free
+          retries: 100
+          delay: 0
+          block:
+            - name: Construire le hostname
+              set_fact:
+                current_hostname: "{{ hostname_prefix }}{{ '%02d' | format(current_index) }}"
+
+            - name: Vérifier si hostname existe sur phpIPAM
+              uri:
+                url: "{{ phpipam_api_url }}addresses/search/{{ current_hostname }}/"
+                method: GET
+                headers:
+                  token: "{{ phpipam_api_token }}"
+                return_content: yes
+                status_code: [200,404]
+              register: hostname_check
+
+            - name: Déterminer si hostname est libre
+              set_fact:
+                hostname_free: "{{ hostname_check.json.data | length == 0 }}"
+
+            - name: Incrémenter l'index
+              set_fact:
+                current_index: "{{ current_index + 1 }}"
+
+    - name: Récupérer les IP libres dans la VLAN
+      uri:
+        url: "{{ phpipam_api_url }}addresses/{{ vlan_id }}/"
+        method: GET
+        headers:
+          token: "{{ phpipam_api_token }}"
+        return_content: yes
+        status_code: 200
+      register: vlan_ips
+
+    - name: Filtrer les IP non assignées
+      set_fact:
+        free_ip_list: "{{ vlan_ips.json.data | selectattr('hostname','equalto',None) | map(attribute='ip_addr') | list }}"
+
+    - name: Choisir la première IP libre
+      set_fact:
+        selected_ip: "{{ free_ip_list[0] }}"
+
+    - name: Créer la VM
+      vmware_guest:   # ou remplace par le module adapté
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_user }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        name: "{{ current_hostname }}"
+        template: "{{ vm_template_id }}"
+        networks:
+          - name: "{{ vlan_network_name }}"
+            ip: "{{ selected_ip }}"
+        state: poweredon
+
+    - name: Ajouter la VM dans phpIPAM
+      uri:
+        url: "{{ phpipam_api_url }}addresses/"
+        method: POST
+        headers:
+          token: "{{ phpipam_api_token }}"
+          Content-Type: "application/json"
+        body: |
+          {
+            "subnetId": "{{ vlan_id }}",
+            "ip_addr": "{{ selected_ip }}",
+            "hostname": "{{ current_hostname }}"
+          }
+        status_code: 201
+        body_format: json
