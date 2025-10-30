@@ -1,39 +1,43 @@
 ---
-- name: Analyse toutes les VMs VMware
+- name: Analyse des VMs VMware
   hosts: vcenter_servers
   connection: local
   gather_facts: no
 
+  vars:
+    vcenter_hostname: "vcenterpreprod.basan.mg"
+    vcenter_username: "your_username"
+    vcenter_password: "your_password"
+
   tasks:
     - name: Récupérer toutes les VMs
-      community.vmware.vmware_vm_facts:
+      community.vmware.vmware_guest_info:
         hostname: "{{ vcenter_hostname }}"
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
-        validate_certs: False
-        datacenter: "DC - Preprod"   # change to your datacenter
+        validate_certs: no
+        folder: "/"           # root folder, change if needed
       delegate_to: localhost
-      register: vm_facts
+      register: all_vms
 
-    - name: Afficher le nombre total de VMs
-      ansible.builtin.debug:
-        msg: "Nombre total de VMs : {{ vm_facts.virtual_machines | length }}"
-
-    - name: Séparer Linux et Windows
-      ansible.builtin.set_fact:
-        linux_vms: "{{ vm_facts.virtual_machines | selectattr('guest_id', 'search', '^linux') | list }}"
-        windows_vms: "{{ vm_facts.virtual_machines | selectattr('guest_id', 'search', '^win') | list }}"
-
-    - name: Afficher le nombre de Linux et Windows
+    - name: Afficher la liste des VMs et leur OS
       ansible.builtin.debug:
         msg: |
-          Linux VMs : {{ linux_vms | length }}
-          Windows VMs : {{ windows_vms | length }}
+          {% for vm in all_vms.virtual_machines %}
+          VM: {{ vm.name }}, OS: {{ vm.guest_full_name }}, State: {{ vm.power_state }}
+          {% endfor %}
 
-    - name: Afficher les noms des VMs Linux
-      ansible.builtin.debug:
-        msg: "{{ linux_vms | map(attribute='name') | list }}"
+    - name: Compter les VMs Linux
+      set_fact:
+        linux_vms: "{{ all_vms.virtual_machines | selectattr('guest_id','match','^linux.*') | list }}"
 
-    - name: Afficher les noms des VMs Windows
+    - name: Compter les VMs Windows
+      set_fact:
+        windows_vms: "{{ all_vms.virtual_machines | selectattr('guest_id','match','^windows.*') | list }}"
+
+    - name: Afficher le résumé
       ansible.builtin.debug:
-        msg: "{{ windows_vms | map(attribute='name') | list }}"
+        msg: |
+          Nombre total de VMs: {{ all_vms.virtual_machines | length }}
+          VMs Linux: {{ linux_vms | length }}
+          VMs Windows: {{ windows_vms | length }}
