@@ -1,49 +1,50 @@
 ---
-- name: Analyze all VMs in vCenter
+- name: VMware VM Summary Report
   hosts: vcenter_servers
   connection: local
-  gather_facts: no
+  gather_facts: false
 
   vars:
-    vcenter_hostname: "vcenterpreprod.basan.mg"
-    vcenter_username: "administrator@vsphere.local"
-    vcenter_password: "YOUR_PASSWORD"
-    validate_certs: no
+    vcenter_hostname: "{{ vcenter_hostname }}"
+    vcenter_username: "{{ vcenter_username }}"
+    vcenter_password: "{{ vcenter_password }}"
 
   tasks:
 
-    - name: Get all VMs from vCenter
+    - name: Gather all VMs in vCenter
       community.vmware.vmware_vm_info:
         hostname: "{{ vcenter_hostname }}"
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
-        validate_certs: "{{ validate_certs }}"
-        folder: "/"   # Query all VMs in root folder
+        validate_certs: false
       delegate_to: localhost
       register: all_vms
 
-    - name: Ensure we got some VMs
-      ansible.builtin.debug:
-        msg: "No VMs found!"
-      when: all_vms.virtual_machines | length == 0
+    - name: Initialize counters
+      set_fact:
+        linux_count: 0
+        windows_count: 0
 
     - name: Show all VM names and OS
       ansible.builtin.debug:
-        msg: "VM '{{ item.name }}' -> OS: '{{ item.guest_full_name }}', Power State: '{{ item.power_state }}'"
-      loop: "{{ all_vms.virtual_machines }}"
-      when: all_vms.virtual_machines | length > 0
+        msg: "VM '{{ item.name | default('Unknown') }}' -> OS: '{{ item.guest_full_name | default('Unknown') }}', Power State: '{{ item.power_state | default('Unknown') }}'"
+      loop: "{{ all_vms.virtual_machines | default([]) }}"
 
-    - name: Count Linux VMs
-      ansible.builtin.set_fact:
-        linux_vms: "{{ all_vms.virtual_machines | selectattr('guest_full_name','search','Linux') | list | length }}"
+    - name: Count Linux and Windows VMs
+      set_fact:
+        linux_count: "{{ linux_count + 1 }}"
+      loop: "{{ all_vms.virtual_machines | default([]) }}"
+      when: item.guest_full_name is defined and ('Linux' in item.guest_full_name)
 
     - name: Count Windows VMs
-      ansible.builtin.set_fact:
-        windows_vms: "{{ all_vms.virtual_machines | selectattr('guest_full_name','search','Windows') | list | length }}"
+      set_fact:
+        windows_count: "{{ windows_count + 1 }}"
+      loop: "{{ all_vms.virtual_machines | default([]) }}"
+      when: item.guest_full_name is defined and ('Windows' in item.guest_full_name)
 
     - name: Show summary
       ansible.builtin.debug:
-        msg:
-          - "Total VMs: {{ all_vms.virtual_machines | length }}"
-          - "Linux VMs: {{ linux_vms }}"
-          - "Windows VMs: {{ windows_vms }}"
+        msg: |
+          Total VMs: {{ all_vms.virtual_machines | length | default(0) }}
+          Linux VMs: {{ linux_count }}
+          Windows VMs: {{ windows_count }}
