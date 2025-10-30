@@ -1,0 +1,52 @@
+---
+- name: Analyse VMs VMware
+  hosts: vcenter_servers
+  connection: local
+  gather_facts: no
+
+  vars:
+    # Optional: filter by folder, cluster, or datacenter
+    datacenter_name: "DC - Preprod"
+    cluster_name: ""  # leave empty to get all
+    folder: ""        # leave empty to get all
+
+  tasks:
+    - name: Récupérer toutes les VMs
+      community.vmware.vmware_guest_info:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: False
+        datacenter: "{{ datacenter_name }}"
+        folder: "{{ folder | default(omit) }}"
+        cluster: "{{ cluster_name | default(omit) }}"
+      delegate_to: localhost
+      register: vm_info
+      failed_when: vm_info.failed is defined and vm_info.failed
+
+    - name: Debug full VM list
+      ansible.builtin.debug:
+        var: vm_info.virtual_machines
+
+    - name: Set fact for Linux VMs
+      ansible.builtin.set_fact:
+        linux_vms: "{{ vm_info.virtual_machines | selectattr('guest_id', 'search', '^linux') | list }}"
+
+    - name: Set fact for Windows VMs
+      ansible.builtin.set_fact:
+        windows_vms: "{{ vm_info.virtual_machines | selectattr('guest_id', 'search', '^win') | list }}"
+
+    - name: Afficher le nombre de Linux et Windows VMs
+      ansible.builtin.debug:
+        msg: |
+          Nombre total de VMs : {{ vm_info.virtual_machines | length }}
+          Nombre de Linux VMs : {{ linux_vms | length }}
+          Nombre de Windows VMs : {{ windows_vms | length }}
+
+    - name: Afficher la liste des VMs Linux
+      ansible.builtin.debug:
+        msg: "{{ linux_vms | map(attribute='name') | list }}"
+
+    - name: Afficher la liste des VMs Windows
+      ansible.builtin.debug:
+        msg: "{{ windows_vms | map(attribute='name') | list }}"
