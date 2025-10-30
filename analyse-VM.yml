@@ -1,19 +1,19 @@
 ---
-- name: VMware VM Summary Report
+- name: VMware VM Summary
   hosts: vcenter_servers
-  connection: local
   gather_facts: false
+  connection: local
 
   vars:
-    vcenter_hostname: "YOUR_VCENTER_HOSTNAME"
-    vcenter_username: "YOUR_USERNAME"
+    vcenter_hostname: "vcenterpreprod.basan.mg"
+    vcenter_username: "administrator@vsphere.local"
     vcenter_password: "YOUR_PASSWORD"
     validate_certs: false
 
   tasks:
 
     - name: Gather all VMs from vCenter
-      community.vmware.vmware_guest_info:
+      community.vmware.vmware_vm_info:
         hostname: "{{ vcenter_hostname }}"
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
@@ -25,29 +25,28 @@
       set_fact:
         linux_count: 0
         windows_count: 0
-        vm_report: []
 
-    - name: Build VM report list and count Linux/Windows
+    - name: Build VM table and count Linux/Windows
       set_fact:
-        vm_report: "{{ vm_report + [ {'name': item.guest_name | default('Unknown'),
-                                     'os': item.guest_fullname | default('Unknown'),
-                                     'power': item.power_state | default('Unknown') } ] }}"
-        linux_count: "{{ linux_count + 1 if (item.guest_fullname is defined and 'Linux' in item.guest_fullname) else linux_count }}"
-        windows_count: "{{ windows_count + 1 if (item.guest_fullname is defined and 'Windows' in item.guest_fullname) else windows_count }}"
+        vm_table: "{{ vm_table | default([]) + [ {
+          'name': (item.guest_name | default('Unknown')),
+          'os': (item.guest_fullname | default('Unknown')),
+          'power': (item.power_state | default('Unknown'))
+        } ] }}"
+        linux_count: "{{ linux_count + 1 if (item.guest_fullname is defined and 'linux' in item.guest_fullname | lower) else linux_count }}"
+        windows_count: "{{ windows_count + 1 if (item.guest_fullname is defined and 'windows' in item.guest_fullname | lower) else windows_count }}"
       loop: "{{ all_vms.virtual_machines | default([]) }}"
-      loop_control:
-        label: "{{ item.guest_name | default('Unknown') }}"
 
     - name: Display VM Table
       debug:
         msg: |
-          {% for vm in vm_report %}
+          {% for vm in vm_table %}
           Name: {{ vm.name }} | OS: {{ vm.os }} | Power: {{ vm.power }}
           {% endfor %}
 
     - name: Display Summary
       debug:
         msg: |
-          Total VMs: {{ vm_report | length }}
+          Total VMs: {{ vm_table | length }}
           Linux VMs: {{ linux_count }}
-          Windows VMs: {{ windows_count }}
+          Windows
