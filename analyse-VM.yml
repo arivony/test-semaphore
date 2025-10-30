@@ -1,52 +1,39 @@
 ---
-- name: Analyse VMs VMware
+- name: Analyse toutes les VMs VMware
   hosts: vcenter_servers
   connection: local
   gather_facts: no
 
-  vars:
-    # Optional: filter by folder, cluster, or datacenter
-    datacenter_name: "DC - Preprod"
-    cluster_name: ""  # leave empty to get all
-    folder: ""        # leave empty to get all
-
   tasks:
     - name: Récupérer toutes les VMs
-      community.vmware.vmware_guest_info:
+      community.vmware.vmware_vm_facts:
         hostname: "{{ vcenter_hostname }}"
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
         validate_certs: False
-        datacenter: "{{ datacenter_name }}"
-        folder: "{{ folder | default(omit) }}"
-        cluster: "{{ cluster_name | default(omit) }}"
+        datacenter: "DC - Preprod"   # change to your datacenter
       delegate_to: localhost
-      register: vm_info
-      failed_when: vm_info.failed is defined and vm_info.failed
+      register: vm_facts
 
-    - name: Debug full VM list
+    - name: Afficher le nombre total de VMs
       ansible.builtin.debug:
-        var: vm_info.virtual_machines
+        msg: "Nombre total de VMs : {{ vm_facts.virtual_machines | length }}"
 
-    - name: Set fact for Linux VMs
+    - name: Séparer Linux et Windows
       ansible.builtin.set_fact:
-        linux_vms: "{{ vm_info.virtual_machines | selectattr('guest_id', 'search', '^linux') | list }}"
+        linux_vms: "{{ vm_facts.virtual_machines | selectattr('guest_id', 'search', '^linux') | list }}"
+        windows_vms: "{{ vm_facts.virtual_machines | selectattr('guest_id', 'search', '^win') | list }}"
 
-    - name: Set fact for Windows VMs
-      ansible.builtin.set_fact:
-        windows_vms: "{{ vm_info.virtual_machines | selectattr('guest_id', 'search', '^win') | list }}"
-
-    - name: Afficher le nombre de Linux et Windows VMs
+    - name: Afficher le nombre de Linux et Windows
       ansible.builtin.debug:
         msg: |
-          Nombre total de VMs : {{ vm_info.virtual_machines | length }}
-          Nombre de Linux VMs : {{ linux_vms | length }}
-          Nombre de Windows VMs : {{ windows_vms | length }}
+          Linux VMs : {{ linux_vms | length }}
+          Windows VMs : {{ windows_vms | length }}
 
-    - name: Afficher la liste des VMs Linux
+    - name: Afficher les noms des VMs Linux
       ansible.builtin.debug:
         msg: "{{ linux_vms | map(attribute='name') | list }}"
 
-    - name: Afficher la liste des VMs Windows
+    - name: Afficher les noms des VMs Windows
       ansible.builtin.debug:
         msg: "{{ windows_vms | map(attribute='name') | list }}"
