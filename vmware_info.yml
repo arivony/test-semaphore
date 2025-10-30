@@ -10,7 +10,7 @@
         username: "{{ vcenter_username }}"
         password: "{{ vcenter_password }}"
         validate_certs: False # Définir à True si vous utilisez des certificats valides
-        name: "Nom_de_votre_VM_cible" # Le nom de la VM dans vCenter
+        name: "TNLECSRVDTB55" # Le nom de la VM dans vCenter
       delegate_to: localhost
       register: vm_info
 
